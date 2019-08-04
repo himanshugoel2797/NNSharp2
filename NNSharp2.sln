@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29009.5
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NNSharp2", "NNSharp2\NNSharp2.csproj", "{B64DA8CC-8DBB-4A13-BC2C-508B40AA51FA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NNSharp2.DerivTest", "NNSharp2.DerivTest\NNSharp2.DerivTest.csproj", "{ECAC545B-DB51-46AA-A71E-33E1E4982573}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B64DA8CC-8DBB-4A13-BC2C-508B40AA51FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B64DA8CC-8DBB-4A13-BC2C-508B40AA51FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B64DA8CC-8DBB-4A13-BC2C-508B40AA51FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B64DA8CC-8DBB-4A13-BC2C-508B40AA51FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECAC545B-DB51-46AA-A71E-33E1E4982573}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECAC545B-DB51-46AA-A71E-33E1E4982573}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECAC545B-DB51-46AA-A71E-33E1E4982573}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECAC545B-DB51-46AA-A71E-33E1E4982573}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {408255C0-6F6A-42F4-BE46-F6492286E578}
+	EndGlobalSection
+EndGlobal
