@@ -33,12 +33,17 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="MathNet.Numerics, Version=4.8.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\MathNet.Numerics.4.8.1\lib\net461\MathNet.Numerics.dll</HintPath>
+    </Reference>
     <Reference Include="OpenCL.Net">
       <HintPath>..\OpenCL.NET\OpenCL.Net.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -57,11 +62,15 @@
     <Compile Include="Matrix.cs" />
     <Compile Include="Memory.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RealTensor.cs" />
     <Compile Include="Tools\ImageManipulation.cs" />
     <Compile Include="Tools\NRandom.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="ANN\Layers\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

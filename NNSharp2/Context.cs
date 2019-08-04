@@ -402,7 +402,7 @@ namespace NNSharp2
         List<CommandBuffer> cmdBuffers;
         bool half = true;
 
-        private Tensor ComputeGPUInternal(ContextInputEntry[] inputs, int i, Tensor m, CommandBuffer cmdBuffer)
+        private Tensor ComputeInternal(ContextInputEntry[] inputs, int i, Tensor m, CommandBuffer cmdBuffer)
         {
             switch (m.node.Operation)
             {
@@ -418,7 +418,7 @@ namespace NNSharp2
                                     if (!results[j].Evaluated)
                                     {
                                         var cmdBuffer2 = new CommandBuffer(half);
-                                        results[j].Result = ComputeGPUInternal(inputs, j, outputs[j].Expression, cmdBuffer2);
+                                        results[j].Result = ComputeInternal(inputs, j, outputs[j].Expression, cmdBuffer2);
                                         results[j].Evaluated = true;
                                         cmdBuffers.Add(cmdBuffer2);
                                     }
@@ -440,7 +440,7 @@ namespace NNSharp2
                     break;
                 case NodeOperation.AddFloat:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
                         var op1 = (float)m.node.Children[1].Value;
                         var res = new Tensor($"tmp{ID++}", op0.Axes);
 
@@ -452,6 +452,7 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 }
                             },
                             new CommandParams[] {
@@ -468,8 +469,8 @@ namespace NNSharp2
                     }
                 case NodeOperation.Addition:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
-                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
                         var res = new Tensor($"tmp{ID++}", op0.Axes);
 
                         cmdBuffer.Add(Commands.Addition,
@@ -480,12 +481,14 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 },
                                 new CommandParams() {
                                     Name = op1.name,
                                     Axes = op1.Axes,
                                     Transpose = op1.transposed,
                                     Strides = op1.Strides,
+                                    Value = op1,
                                 }
                             },
                             new CommandParams[] {
@@ -502,7 +505,7 @@ namespace NNSharp2
                     }
                 case NodeOperation.MultiplyFloat:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
                         var op1 = (float)m.node.Children[1].Value;
                         if (op1 == 0) return new Tensor(op0.Axes) { name = $"tmp{ID++}" };
                         if (op1 == 1) return op0;
@@ -517,6 +520,7 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 }
                             },
                             new CommandParams[] {
@@ -533,8 +537,8 @@ namespace NNSharp2
                     }
                 case NodeOperation.Hadamard:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
-                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
                         var res = new Tensor($"tmp{ID++}", op0.Axes);
 
                         cmdBuffer.Add(Commands.Hadamard,
@@ -545,12 +549,14 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 },
                                 new CommandParams() {
                                     Name = op1.name,
                                     Axes = op1.Axes,
                                     Transpose = op1.transposed,
                                     Strides = op1.Strides,
+                                    Value = op1,
                                 }
                             },
                             new CommandParams[] {
@@ -567,7 +573,7 @@ namespace NNSharp2
                     }
                 case NodeOperation.SubtractFloat:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
                         var op1 = (float)m.node.Children[0].Value;
                         var res = new Tensor($"tmp{ID++}", op0.Axes);
 
@@ -579,6 +585,7 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 }
                             },
                             new CommandParams[] {
@@ -595,7 +602,7 @@ namespace NNSharp2
                     }
                 case NodeOperation.Reciprocal:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
                         var res = new Tensor($"tmp{ID++}", op0.Axes);
 
                         cmdBuffer.Add(Commands.Reciprocal,
@@ -606,6 +613,7 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 }
                             },
                             new CommandParams[] {
@@ -622,7 +630,7 @@ namespace NNSharp2
                     }
                 case NodeOperation.Exp:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
                         var res = new Tensor($"tmp{ID++}", op0.Axes);
 
                         cmdBuffer.Add(Commands.Exp,
@@ -633,6 +641,7 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 }
                             },
                             new CommandParams[] {
@@ -649,7 +658,7 @@ namespace NNSharp2
                     }
                 case NodeOperation.Pow:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
                         var op1 = (float)m.node.Children[1].Value;
                         if (op1 == 0) return new Tensor(1, op0.Axes) { name = $"tmp{ID++}" };
                         if (op1 == 1) return op0;
@@ -663,6 +672,7 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 }
                             },
                             new CommandParams[] {
@@ -679,8 +689,8 @@ namespace NNSharp2
                     }
                 case NodeOperation.Dot:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
-                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
 
                         if (op0.Axes.Length != 2) throw new Exception();
                         if (op1.Axes.Length != 2) throw new Exception();
@@ -696,12 +706,14 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 },
                                 new CommandParams() {
                                     Name = op1.name,
                                     Axes = op1.Axes,
                                     Transpose = op1.transposed,
                                     Strides = op1.Strides,
+                                    Value = op1,
                                 }
                             },
                             new CommandParams[] {
@@ -718,8 +730,8 @@ namespace NNSharp2
                     }
                 case NodeOperation.VectorProduct:
                     {
-                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
-                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
 
                         if (op0.Axes.Length != 2 | op1.Axes.Length != 2) throw new Exception();
 
@@ -749,12 +761,14 @@ namespace NNSharp2
                                     Axes = op0.Axes,
                                     Transpose = op0.transposed,
                                     Strides = op0.Strides,
+                                    Value = op0,
                                 },
                                 new CommandParams() {
                                     Name = op1.name,
                                     Axes = op1.Axes,
                                     Transpose = op1.transposed,
                                     Strides = op1.Strides,
+                                    Value = op1,
                                 }
                                 },
                                 new CommandParams[] {
@@ -772,7 +786,7 @@ namespace NNSharp2
                     }
                 case NodeOperation.Transpose:
                     {
-                        return Tensor.Transpose(ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer));
+                        return Tensor.Transpose(ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer));
                     }
             }
             throw new Exception();
@@ -792,11 +806,21 @@ namespace NNSharp2
                     if (results[i].Evaluated) continue;
 
                     var cmdBuffer = new CommandBuffer(half);
-                    results[i].Result = ComputeGPUInternal(inputs, i, outputs[i].Expression, cmdBuffer);
+                    results[i].Result = ComputeInternal(inputs, i, outputs[i].Expression, cmdBuffer);
                     results[i].Evaluated = true;
                     cmdBuffers.Add(cmdBuffer);
                 }
+
+                for (int i = 0; i < cmdBuffers.Count; i++)
+                {
+                    cmdBuffers[i].Simplify();
+                    cmdBuffers[i].EmitCL();
+                }
             }
+
+            for (int i = 0; i < cmdBuffers.Count; i++)
+                cmdBuffers[i].RunCL();
+
             return results;
         }
         #endregion
