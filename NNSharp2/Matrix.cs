@@ -231,6 +231,12 @@ namespace NNSharp2
 
         public static bool operator ==(Tensor a, Tensor b)
         {
+            if (( (object)a == null && (object)b != null) || ((object)a != null && (object)b == null))
+                return false;
+
+            if ((object)a == null && (object)b == null)
+                return true;
+
             var res = a.Axes.SequenceEqual(b.Axes) && a.name == b.name && a.mem_const == b.mem_const && a.node == b.node;
             if (!res)
                 return false;
@@ -556,6 +562,7 @@ namespace NNSharp2
 
         public static string PrintValue(Tensor a)
         {
+            if (a == null) return "null";
             if (a.node.Operation == NodeOperation.Operand && a.node.ResultType == NodeResultType.InitializedMatrix)
             {
                 string v = "";
@@ -585,6 +592,10 @@ namespace NNSharp2
                                 v += $"{a.mem[a.Index(i, j)]}";
                         v += "]\n";
                     }
+                return v;
+            }else if(a.node.Operation == NodeOperation.Operand && a.node.ResultType == NodeResultType.CommonConstantMatrix)
+            {
+                string v = $"[{a.mem_const}]\n";
                 return v;
             }
             return "";

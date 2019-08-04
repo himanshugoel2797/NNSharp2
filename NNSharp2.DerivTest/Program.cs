@@ -54,7 +54,7 @@ namespace NNSharp2.DerivTest
             Console.WriteLine($"{Tensor.PrintAxes(dz)}, dz = {(dz)}");
             Console.WriteLine($"{Tensor.PrintAxes(dE)}, dE = {(dE)}");
 
-            var results = ctxt.ComputeGPU(new ContextInputEntry[]
+            var results = ctxt.ComputeCPU(new ContextInputEntry[]
             {
                 new ContextInputEntry()
                 {

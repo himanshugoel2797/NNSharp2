@@ -146,259 +146,6 @@ namespace NNSharp2
             ProcessOutputs(a, desiredOutputs);
         }
 
-        #region CPU Implementation
-        private Tensor ComputeCPUInternal(ContextInputEntry[] inputs, int i, Tensor m)
-        {
-            switch (m.node.Operation)
-            {
-                case NodeOperation.Operand:
-                    switch (m.node.ResultType)
-                    {
-                        case NodeResultType.ParameterMatrix:
-                            //find the value if computed, else compute it
-                            for (int j = 0; j < results.Length; j++)
-                            {
-                                if (results[j].Name == ((Tensor)m.node.Value).name)
-                                {
-                                    if (!results[j].Evaluated)
-                                    {
-                                        results[j].Result = ComputeCPUInternal(inputs, j, outputs[j].Expression);
-                                        results[j].Evaluated = true;
-                                    }
-                                    return results[j].Result;
-                                }
-                            }
-                            for (int j = 0; j < inputs.Length; j++)
-                                if (inputs[j].Name == ((Tensor)m.node.Value).name)
-                                    return inputs[j].Value;
-
-                            throw new Exception();
-                        case NodeResultType.CommonConstantMatrix:
-                        case NodeResultType.InitializedMatrix:
-                            return (Tensor)m.node.Value;
-                    }
-                    break;
-                case NodeOperation.AddFloat:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = (float)m.node.Children[1].Value;
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor(op0.mem_const + op1, op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = op0.mem[j] + op1;
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.Addition:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[1].Value);
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor(op0.mem_const + op1.mem_const, op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = op0.mem[j] + op1.mem[j];
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.MultiplyFloat:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = (float)m.node.Children[1].Value;
-                        if (op1 == 0) return new Tensor(op0.Axes);
-                        if (op1 == 1) return op0;
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor(op0.mem_const * op1, op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = op0.mem[j] * op1;
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.Hadamard:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[1].Value);
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor(op0.mem_const * op1.mem_const, op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = op0.mem[j] * op1.mem[j];
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.SubtractFloat:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[1].Value);
-                        var op1 = (float)m.node.Children[0].Value;
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor(op1 - op0.mem_const, op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = op1 - op0.mem[j];
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.Reciprocal:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor(1.0f / op0.mem_const, op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = 1.0f / op0.mem[j];
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.Exp:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor((float)Math.Exp(op0.mem_const), op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = (float)Math.Exp(op0.mem[j]);
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.Pow:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = (float)m.node.Children[1].Value;
-                        if (op1 == 0) return new Tensor(1, op0.Axes);
-                        if (op1 == 1) return op0;
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor((float)Math.Pow(op0.mem_const, op1), op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = (float)Math.Pow(op0.mem[j], op1);
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.Dot:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[1].Value);
-
-                        if (op0.Axes.Length != 2) throw new Exception();
-                        if (op1.Axes.Length != 2) throw new Exception();
-
-                        if (op0.Axes[1] != op1.Axes[0]) throw new Exception();
-
-                        var fmem = new float[op0.Axes[0] * op1.Axes[1]];
-                        //Compute dot product
-                        Parallel.For(0, op0.Axes[0], (i0) =>
-                        {
-                            for (int j = 0; j < op1.Axes[1]; j++)
-                            {
-                                float acc = 0;
-                                for (int k = 0; k < op0.Axes[1]; k++)
-                                {
-                                    //TODO: Check if either one is continuously indexed, if so, use a version that uses and increments pointers directly
-                                    acc += op0.mem[op0.Index(i0, k)] * op1.mem[op1.Index(k, j)];
-                                }
-
-                                fmem[i0 * op1.Axes[1] + j] = acc;
-                            }
-                        });
-                        return new Tensor(fmem, op0.Axes[0], op1.Axes[1]);
-                    }
-                case NodeOperation.VectorProduct:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[1].Value);
-
-                        if (op0.Axes.Length != 2 | op1.Axes.Length != 2) throw new Exception();
-
-                        //Verify that broadcasting will result in equivalent tensors
-                        var a_oaxes = new int[op0.Axes.Length];
-                        var b_oaxes = new int[op1.Axes.Length];
-                        for (int a_i = 0; a_i < a_oaxes.Length; a_i++)
-                            if (op0.Axes[a_i] == 1)
-                                a_oaxes[a_i] = op1.Axes[a_i];
-                            else
-                                a_oaxes[a_i] = op0.Axes[a_i];
-
-                        for (int b_i = 0; b_i < b_oaxes.Length; b_i++)
-                            if (op1.Axes[b_i] == 1)
-                                b_oaxes[b_i] = op0.Axes[b_i];
-                            else
-                                b_oaxes[b_i] = op1.Axes[b_i];
-
-                        if (a_oaxes.SequenceEqual(b_oaxes))
-                        {
-                            var fmem = new float[a_oaxes.Aggregate((a, b) => a * b)];
-
-                            for (int i0 = 0; i0 < a_oaxes[0]; i0++)
-                                for (int j0 = 0; j0 < a_oaxes[1]; j0++)
-                                    if (op0.node.ResultType == NodeResultType.InitializedMatrix && op1.node.ResultType == NodeResultType.CommonConstantMatrix)
-                                        fmem[i0 * a_oaxes[1] + j0] = op0.mem[op0.Index(op0.Axes[0] == 1 ? 0 : i0, op0.Axes[1] == 1 ? 0 : j0)] * op1.mem_const;
-                                    else if (op0.node.ResultType == NodeResultType.CommonConstantMatrix && op1.node.ResultType == NodeResultType.InitializedMatrix)
-                                        fmem[i0 * a_oaxes[1] + j0] = op0.mem_const * op1.mem[op1.Index(op1.Axes[0] == 1 ? 0 : i0, op1.Axes[1] == 1 ? 0 : j0)];
-                                    else if (op0.node.ResultType == NodeResultType.InitializedMatrix && op1.node.ResultType == NodeResultType.InitializedMatrix)
-                                        fmem[i0 * a_oaxes[1] + j0] = op0.mem[op0.Index(op0.Axes[0] == 1 ? 0 : i0, op0.Axes[1] == 1 ? 0 : j0)] * op1.mem[op1.Index(op1.Axes[0] == 1 ? 0 : i0, op1.Axes[1] == 1 ? 0 : j0)];
-
-                            Tensor c = new Tensor(fmem, a_oaxes);
-                            return c;
-                        }
-                        throw new Exception();
-                    }
-                case NodeOperation.Transpose:
-                    {
-                        return Tensor.Transpose(ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value));
-                    }
-            }
-            throw new Exception();
-        }
-        public ContextResultEntry[] ComputeCPU(params ContextInputEntry[] inputs)
-        {
-            //Interpret each expression, start by evaluating the root, then substituting any provided inputs, upon encountering unevaluated result variables, evaluate them
-            for (int i = 0; i < results.Length; i++)
-                results[i].Evaluated = false;
-
-            for (int i = 0; i < results.Length; i++)
-                results[i].Result = ComputeCPUInternal(inputs, i, outputs[i].Expression);
-
-            return results;
-        }
-        #endregion
-
-        #region GPU Implementation
         List<CommandBuffer> cmdBuffers;
         bool half = true;
 
@@ -417,8 +164,9 @@ namespace NNSharp2
                                 {
                                     if (!results[j].Evaluated)
                                     {
-                                        var cmdBuffer2 = new CommandBuffer(half);
+                                        var cmdBuffer2 = new CommandBuffer(results[j].Name, half);
                                         results[j].Result = ComputeInternal(inputs, j, outputs[j].Expression, cmdBuffer2);
+                                        results[i].Result.transposed = false;
                                         results[j].Evaluated = true;
                                         cmdBuffers.Add(cmdBuffer2);
                                     }
@@ -753,7 +501,7 @@ namespace NNSharp2
                         if (a_oaxes.SequenceEqual(b_oaxes))
                         {
                             Tensor res = new Tensor($"tmp{ID++}", a_oaxes);
-                            cmdBuffer.Add(Commands.Dot,
+                            cmdBuffer.Add(Commands.VectorProduct,
                                 a_oaxes,
                                 new CommandParams[] {
                                 new CommandParams() {
@@ -786,11 +534,94 @@ namespace NNSharp2
                     }
                 case NodeOperation.Transpose:
                     {
-                        return Tensor.Transpose(ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer));
+                        var op0 = ComputeInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var res = Tensor.Transpose(op0);
+                        res.name = $"tmp{ID++}";
+
+                        cmdBuffer.Add(Commands.Transpose,
+                            new int[] { op0.Axes[0], op0.Axes[1] },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                    Value = op0,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            null);
+
+                        return res;
                     }
             }
             throw new Exception();
         }
+
+        public ContextResultEntry[] ComputeCPU(params ContextInputEntry[] inputs)
+        {
+            if (cmdBuffers == null)
+            {
+                cmdBuffers = new List<CommandBuffer>();
+
+                //Interpret each expression, start by evaluating the root, then substituting any provided inputs, upon encountering unevaluated result variables, evaluate them
+                for (int i = 0; i < results.Length; i++)
+                    results[i].Evaluated = false;
+
+                for (int i = 0; i < results.Length; i++)
+                {
+                    if (results[i].Evaluated) continue;
+
+                    var cmdBuffer = new CommandBuffer(results[i].Name, half);
+                    results[i].Result = ComputeInternal(inputs, i, outputs[i].Expression, cmdBuffer);
+                    results[i].Result.transposed = false;
+                    results[i].Evaluated = true;
+                    cmdBuffers.Add(cmdBuffer);
+                }
+
+                for (int i = 0; i < cmdBuffers.Count; i++)
+                {
+                    cmdBuffers[i].Simplify();
+                }
+            }
+
+            var inputs2 = new List<ContextInputEntry>();
+            var varStorage = new Dictionary<string, MathNet.Numerics.LinearAlgebra.Matrix<float>>();
+            inputs2.AddRange(inputs);
+            for (int i = 0; i < cmdBuffers.Count; i++)
+            {
+                var curResult = results.Single(a => a.Name == cmdBuffers[i].Name);
+                if (curResult.Result.node.ResultType != NodeResultType.CommonConstantMatrix && curResult.Result.node.ResultType != NodeResultType.InitializedMatrix)
+                {
+                    var res = cmdBuffers[i].RunCS(inputs, varStorage);
+                    curResult.Result = res;
+                    inputs2.Add(new ContextInputEntry()
+                    {
+                        Name = cmdBuffers[i].Name,
+                        Value = res
+                    });
+                }
+                else
+                {
+                    inputs2.Add(new ContextInputEntry()
+                    {
+                        Name = cmdBuffers[i].Name,
+                        Value = curResult.Result
+                    });
+                }
+
+            }
+
+            return results;
+        }
+
         public ContextResultEntry[] ComputeGPU(params ContextInputEntry[] inputs)
         {
             if (cmdBuffers == null)
@@ -805,7 +636,7 @@ namespace NNSharp2
                 {
                     if (results[i].Evaluated) continue;
 
-                    var cmdBuffer = new CommandBuffer(half);
+                    var cmdBuffer = new CommandBuffer(results[i].Name, half);
                     results[i].Result = ComputeInternal(inputs, i, outputs[i].Expression, cmdBuffer);
                     results[i].Evaluated = true;
                     cmdBuffers.Add(cmdBuffer);
@@ -818,11 +649,20 @@ namespace NNSharp2
                 }
             }
 
+            var inputs2 = new List<ContextInputEntry>();
+            inputs2.AddRange(inputs);
             for (int i = 0; i < cmdBuffers.Count; i++)
-                cmdBuffers[i].RunCL();
+            {
+                var res = cmdBuffers[i].RunCL(inputs);
+                results.Single(a => a.Name == cmdBuffers[i].Name).Result = res;
+                inputs2.Add(new ContextInputEntry()
+                {
+                    Name = cmdBuffers[i].Name,
+                    Value = res
+                });
+            }
 
             return results;
         }
-        #endregion
     }
 }
