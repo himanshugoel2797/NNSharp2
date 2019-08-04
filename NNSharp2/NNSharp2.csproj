@@ -47,7 +47,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ANN\ILayer.cs" />
     <Compile Include="Context.cs" />
+    <Compile Include="Kernels\CommandBuffer.cs" />
     <Compile Include="Kernels\KernelManager.cs" />
     <Compile Include="Node.cs" />
     <Compile Include="Device.cs" />
@@ -59,7 +61,7 @@
     <Compile Include="Tools\NRandom.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="ANN\" />
+    <Folder Include="ANN\Layers\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

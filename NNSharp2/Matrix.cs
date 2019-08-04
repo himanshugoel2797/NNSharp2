@@ -16,6 +16,7 @@ namespace NNSharp2
         internal float[] mem;
         internal string name;
         internal float mem_const;
+        internal bool transposed;
 
         public Tensor(params int[] axes) : this(0, axes) { }
 
@@ -115,6 +116,7 @@ namespace NNSharp2
         public static Tensor Transpose(Tensor a)
         {
             var m = new Tensor(a.name, a.mem, a.mem_const, a.Axes.Reverse().ToArray(), a.Strides.Reverse().ToArray());
+            m.transposed = true;
             m.node = new Node()
             {
                 Operation = NodeOperation.Transpose,
@@ -204,22 +206,6 @@ namespace NNSharp2
                         return left + right;
                     }
                     break;
-                case NodeOperation.Subtraction:
-                    {
-                        var left = Deriv((Tensor)a.node.Children[0].Value, b);
-                        var right = Deriv((Tensor)a.node.Children[1].Value, b);
-
-                        //if left result is zero, return right result only
-                        if (left.node.Operation == NodeOperation.Operand && (left.node.ResultType == NodeResultType.Constant && left.node.Value is float && (float)left.node.Value == 0.0f) || (left.node.ResultType == NodeResultType.CommonConstantMatrix && left.node.Value is Tensor && ((Tensor)left.node.Value).mem_const == 0.0f))
-                            return -1 * right;
-
-                        //if right result is zero, return left result only
-                        if (right.node.Operation == NodeOperation.Operand && (right.node.ResultType == NodeResultType.Constant && right.node.Value is float && (float)right.node.Value == 0.0f) || (right.node.ResultType == NodeResultType.CommonConstantMatrix && right.node.Value is Tensor && ((Tensor)right.node.Value).mem_const == 0.0f))
-                            return left;
-
-                        return left - right;
-                    }
-                    break;
                 case NodeOperation.MultiplyFloat:
                     {
                         var chain = Deriv((Tensor)a.node.Children[0].Value, b);
@@ -284,20 +270,7 @@ namespace NNSharp2
         }
         public static Tensor operator -(Tensor a, Tensor b)
         {
-            if (!a.Axes.SequenceEqual(b.Axes)) throw new Exception();
-
-            Tensor c = new Tensor(a.Axes);
-            c.node = new Node()
-            {
-                Operation = NodeOperation.Subtraction,
-                ResultType = NodeResultType.ResultMatrix,
-                Children = new Node[] { a.node, b.node },
-                Value = c,
-            };
-            a.node.Parents.Add(c.node);
-            b.node.Parents.Add(c.node);
-
-            return c;
+            return a + (b * -1);
         }
 
         public static Tensor operator +(Tensor a, float b)

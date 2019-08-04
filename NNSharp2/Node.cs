@@ -10,7 +10,6 @@ namespace NNSharp2
     {
         Operand,
         Addition,
-        Subtraction,
         Dot,
         Pow,
         Exp,
@@ -124,7 +123,6 @@ namespace NNSharp2
                 case NodeOperation.Pow:
                     return $"{Children[0].ToString()} ^ {Children[1].ToString()}";
                 case NodeOperation.SubtractFloat:
-                case NodeOperation.Subtraction:
                     return $"({Children[0].ToString()} - {Children[1].ToString()})";
                 case NodeOperation.Transpose:
                     return $"{Children[0].ToString()}.T";

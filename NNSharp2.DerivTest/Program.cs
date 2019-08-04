@@ -17,7 +17,7 @@ namespace NNSharp2.DerivTest
             Tensor w = new Tensor(nameof(w), 2, 2);
 
             var f = Tensor.Dot(w, x) + b;
-            var z = f;//Tensor.Recip(1 + Tensor.Exp(-1 * f));
+            var z = Tensor.Recip(1 + Tensor.Exp(-1 * f));
             var dz = Tensor.Deriv(z, w);
             var E = 0.5f * Tensor.Pow(z - eo, 2);
             var dE = Tensor.Hadamard(z - eo, dz);
@@ -54,7 +54,7 @@ namespace NNSharp2.DerivTest
             Console.WriteLine($"{Tensor.PrintAxes(dz)}, dz = {(dz)}");
             Console.WriteLine($"{Tensor.PrintAxes(dE)}, dE = {(dE)}");
 
-            var results = ctxt.ComputeCPU(new ContextInputEntry[]
+            var results = ctxt.ComputeGPU(new ContextInputEntry[]
             {
                 new ContextInputEntry()
                 {

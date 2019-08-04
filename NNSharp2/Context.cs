@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NNSharp2.Kernels;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -28,6 +29,7 @@ namespace NNSharp2
 
     public class Context
     {
+        private static int ID = 0;
         private Tensor builtExpression;
         private ContextOutputEntry[] outputs;
         private ContextResultEntry[] results;
@@ -63,6 +65,9 @@ namespace NNSharp2
         }
         private void Optimize(Tensor a)
         {
+            if (a.node.Value is Tensor && string.IsNullOrEmpty(((Tensor)a.node.Value).name))
+                ((Tensor)a.node.Value).name = $"tmp{ID++}";
+
             if (a.node.Operation == NodeOperation.Operand)
                 return;
 
@@ -95,7 +100,10 @@ namespace NNSharp2
             }
 
             for (int i = 0; i < a.node.Children.Length; i++)
-                if (a.node.Children[i].Value is Tensor) Optimize(a.node.Children[i].Value as Tensor);
+                if (a.node.Children[i].Value is Tensor)
+                {
+                    Optimize(a.node.Children[i].Value as Tensor);
+                }
         }
         private void ProcessOutputs(Tensor a, ContextOutputEntry[] desiredOutputs)
         {
@@ -163,8 +171,8 @@ namespace NNSharp2
                             for (int j = 0; j < inputs.Length; j++)
                                 if (inputs[j].Name == ((Tensor)m.node.Value).name)
                                     return inputs[j].Value;
+
                             throw new Exception();
-                            break;
                         case NodeResultType.CommonConstantMatrix:
                         case NodeResultType.InitializedMatrix:
                             return (Tensor)m.node.Value;
@@ -249,22 +257,6 @@ namespace NNSharp2
                                     return new Tensor(op1 - op0.mem_const, op0.Axes);
                                 case NodeResultType.InitializedMatrix:
                                     fmem[j] = op1 - op0.mem[j];
-                                    break;
-                            }
-                        return new Tensor(fmem, op0.Axes);
-                    }
-                case NodeOperation.Subtraction:
-                    {
-                        var op0 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[0].Value);
-                        var op1 = ComputeCPUInternal(inputs, i, (Tensor)m.node.Children[1].Value);
-                        var fmem = new float[op0.Axes.Aggregate((a, b) => a * b)];
-                        for (int j = 0; j < fmem.Length; j++)
-                            switch (op0.node.ResultType)
-                            {
-                                case NodeResultType.CommonConstantMatrix:
-                                    return new Tensor(op0.mem_const - op1.mem_const, op0.Axes);
-                                case NodeResultType.InitializedMatrix:
-                                    fmem[j] = op0.mem[j] - op1.mem[j];
                                     break;
                             }
                         return new Tensor(fmem, op0.Axes);
@@ -402,6 +394,409 @@ namespace NNSharp2
             for (int i = 0; i < results.Length; i++)
                 results[i].Result = ComputeCPUInternal(inputs, i, outputs[i].Expression);
 
+            return results;
+        }
+        #endregion
+
+        #region GPU Implementation
+        List<CommandBuffer> cmdBuffers;
+        bool half = true;
+
+        private Tensor ComputeGPUInternal(ContextInputEntry[] inputs, int i, Tensor m, CommandBuffer cmdBuffer)
+        {
+            switch (m.node.Operation)
+            {
+                case NodeOperation.Operand:
+                    switch (m.node.ResultType)
+                    {
+                        case NodeResultType.ParameterMatrix:
+                            //find the value if computed, else compute it
+                            for (int j = 0; j < results.Length; j++)
+                            {
+                                if (results[j].Name == ((Tensor)m.node.Value).name)
+                                {
+                                    if (!results[j].Evaluated)
+                                    {
+                                        var cmdBuffer2 = new CommandBuffer(half);
+                                        results[j].Result = ComputeGPUInternal(inputs, j, outputs[j].Expression, cmdBuffer2);
+                                        results[j].Evaluated = true;
+                                        cmdBuffers.Add(cmdBuffer2);
+                                    }
+                                    return results[j].Result;
+                                }
+                            }
+                            for (int j = 0; j < inputs.Length; j++)
+                                if (inputs[j].Name == ((Tensor)m.node.Value).name)
+                                {
+                                    inputs[j].Value.name = inputs[j].Name;
+                                    return inputs[j].Value;
+                                }
+
+                            throw new Exception();
+                        case NodeResultType.CommonConstantMatrix:
+                        case NodeResultType.InitializedMatrix:
+                            return (Tensor)m.node.Value;
+                    }
+                    break;
+                case NodeOperation.AddFloat:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = (float)m.node.Children[1].Value;
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.AddFloat,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            new float[] { op1 });
+
+                        return res;
+                    }
+                case NodeOperation.Addition:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.Addition,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                },
+                                new CommandParams() {
+                                    Name = op1.name,
+                                    Axes = op1.Axes,
+                                    Transpose = op1.transposed,
+                                    Strides = op1.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            null);
+
+                        return res;
+                    }
+                case NodeOperation.MultiplyFloat:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = (float)m.node.Children[1].Value;
+                        if (op1 == 0) return new Tensor(op0.Axes) { name = $"tmp{ID++}" };
+                        if (op1 == 1) return op0;
+
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.MultiplyFloat,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            new float[] { op1 });
+
+                        return res;
+                    }
+                case NodeOperation.Hadamard:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.Hadamard,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                },
+                                new CommandParams() {
+                                    Name = op1.name,
+                                    Axes = op1.Axes,
+                                    Transpose = op1.transposed,
+                                    Strides = op1.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            null);
+
+                        return res;
+                    }
+                case NodeOperation.SubtractFloat:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+                        var op1 = (float)m.node.Children[0].Value;
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.SubtractFloat,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            new float[] { op1 });
+
+                        return res;
+                    }
+                case NodeOperation.Reciprocal:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.Reciprocal,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            null);
+
+                        return res;
+                    }
+                case NodeOperation.Exp:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.Exp,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            null);
+
+                        return res;
+                    }
+                case NodeOperation.Pow:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = (float)m.node.Children[1].Value;
+                        if (op1 == 0) return new Tensor(1, op0.Axes) { name = $"tmp{ID++}" };
+                        if (op1 == 1) return op0;
+                        var res = new Tensor($"tmp{ID++}", op0.Axes);
+
+                        cmdBuffer.Add(Commands.Pow,
+                            new int[] { op0.Axes.Aggregate((a, b) => a * b), 1 },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            new float[] { op1 });
+
+                        return res;
+                    }
+                case NodeOperation.Dot:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+
+                        if (op0.Axes.Length != 2) throw new Exception();
+                        if (op1.Axes.Length != 2) throw new Exception();
+                        if (op0.Axes[1] != op1.Axes[0]) throw new Exception();
+
+                        var res = new Tensor($"tmp{ID++}", op0.Axes[0], op1.Axes[1]);
+
+                        cmdBuffer.Add(Commands.Dot,
+                            new int[] { op0.Axes[0], op1.Axes[1] },
+                            new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                },
+                                new CommandParams() {
+                                    Name = op1.name,
+                                    Axes = op1.Axes,
+                                    Transpose = op1.transposed,
+                                    Strides = op1.Strides,
+                                }
+                            },
+                            new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                            },
+                            null);
+
+                        return res;
+                    }
+                case NodeOperation.VectorProduct:
+                    {
+                        var op0 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer);
+                        var op1 = ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[1].Value, cmdBuffer);
+
+                        if (op0.Axes.Length != 2 | op1.Axes.Length != 2) throw new Exception();
+
+                        //Verify that broadcasting will result in equivalent tensors
+                        var a_oaxes = new int[op0.Axes.Length];
+                        var b_oaxes = new int[op1.Axes.Length];
+                        for (int a_i = 0; a_i < a_oaxes.Length; a_i++)
+                            if (op0.Axes[a_i] == 1)
+                                a_oaxes[a_i] = op1.Axes[a_i];
+                            else
+                                a_oaxes[a_i] = op0.Axes[a_i];
+
+                        for (int b_i = 0; b_i < b_oaxes.Length; b_i++)
+                            if (op1.Axes[b_i] == 1)
+                                b_oaxes[b_i] = op0.Axes[b_i];
+                            else
+                                b_oaxes[b_i] = op1.Axes[b_i];
+
+                        if (a_oaxes.SequenceEqual(b_oaxes))
+                        {
+                            Tensor res = new Tensor($"tmp{ID++}", a_oaxes);
+                            cmdBuffer.Add(Commands.Dot,
+                                a_oaxes,
+                                new CommandParams[] {
+                                new CommandParams() {
+                                    Name = op0.name,
+                                    Axes = op0.Axes,
+                                    Transpose = op0.transposed,
+                                    Strides = op0.Strides,
+                                },
+                                new CommandParams() {
+                                    Name = op1.name,
+                                    Axes = op1.Axes,
+                                    Transpose = op1.transposed,
+                                    Strides = op1.Strides,
+                                }
+                                },
+                                new CommandParams[] {
+                                new CommandParams()
+                                {
+                                    Name = res.name,
+                                    Axes = res.Axes,
+                                    Transpose = false,
+                                }
+                                },
+                                null);
+                            return res;
+                        }
+                        throw new Exception();
+                    }
+                case NodeOperation.Transpose:
+                    {
+                        return Tensor.Transpose(ComputeGPUInternal(inputs, i, (Tensor)m.node.Children[0].Value, cmdBuffer));
+                    }
+            }
+            throw new Exception();
+        }
+        public ContextResultEntry[] ComputeGPU(params ContextInputEntry[] inputs)
+        {
+            if (cmdBuffers == null)
+            {
+                cmdBuffers = new List<CommandBuffer>();
+
+                //Interpret each expression, start by evaluating the root, then substituting any provided inputs, upon encountering unevaluated result variables, evaluate them
+                for (int i = 0; i < results.Length; i++)
+                    results[i].Evaluated = false;
+
+                for (int i = 0; i < results.Length; i++)
+                {
+                    if (results[i].Evaluated) continue;
+
+                    var cmdBuffer = new CommandBuffer(half);
+                    results[i].Result = ComputeGPUInternal(inputs, i, outputs[i].Expression, cmdBuffer);
+                    results[i].Evaluated = true;
+                    cmdBuffers.Add(cmdBuffer);
+                }
+            }
             return results;
         }
         #endregion
